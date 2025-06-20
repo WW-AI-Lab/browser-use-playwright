@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}编辑 {{ workflow.name }} - Browser-use-Playwright{% endblock %}
+
+{% block extra_css %}
+<style>
+    .step-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s;
+    }
+    .step-card:hover {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    .step-header {
+        background-color: #f8f9fa;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #dee2e6;
+        cursor: pointer;
+    }
+    .step-body {
+        padding: 1rem;
+    }
+    .variable-input {
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1><i class="bi bi-pencil"></i> 编辑工作流</h1>
+        <p class="text-muted">{{ workflow.name }}</p>
+    </div>
+    <div class="btn-group">
+        <button class="btn btn-success" onclick="saveWorkflow()">
+            <i class="bi bi-check-lg"></i> 保存
+        </button>
+        <button class="btn btn-outline-warning" onclick="addStep()">
+            <i class="bi bi-plus"></i> 添加步骤
+        </button>
+        <a href="/workflows/{{ workflow.name }}" class="btn btn-outline-secondary">
+            <i class="bi bi-eye"></i> 预览
+        </a>
+        <a href="/" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> 返回
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 工作流基本信息 -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="bi bi-info-circle"></i> 基本信息</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="workflowName" class="form-label">工作流名称</label>
+                    <input type="text" class="form-control" id="workflowName" value="{{ workflow.name }}">
+                </div>
+                <div class="mb-3">
+                    <label for="workflowDescription" class="form-label">描述</label>
+                    <textarea class="form-control" id="workflowDescription" rows="3">{{ workflow.description }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="workflowVersion" class="form-label">版本</label>
+                    <input type="text" class="form-control" id="workflowVersion" value="{{ workflow.version }}">
+                </div>
+            </div>
+        </div>
+        
+        <!-- 变量管理 -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-gear"></i> 变量</h5>
+                <button class="btn btn-sm btn-outline-primary" onclick="addVariable()">
+                    <i class="bi bi-plus"></i> 添加
+                </button>
+            </div>
+            <div class="card-body" id="variablesContainer">
+                {% for var_name, var in workflow.variables.items() %}
+                <div class="variable-input" data-variable="{{ var_name }}">
+                    <div class="row">
+                        <div class="col-6">
+                            <input type="text" class="form-control form-control-sm" placeholder="变量名" value="{{ var_name }}">
+                        </div>
+                        <div class="col-4">
+                            <select class="form-select form-select-sm">
+                                <option value="string" {% if var.type == "string" %}selected{% endif %}>字符串</option>
+                                <option value="number" {% if var.type == "number" %}selected{% endif %}>数字</option>
+                                <option value="boolean" {% if var.type == "boolean" %}selected{% endif %}>布尔值</option>
+                            </select>
+                        </div>
+                        <div class="col-2">
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeVariable(this)" title="删除变量">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mt-1">
+                        <div class="col-6">
+                            <input type="text" class="form-control form-control-sm" placeholder="默认值" value="{{ var.default or '' }}">
+                        </div>
+                        <div class="col-6">
+                            <input type="text" class="form-control form-control-sm" placeholder="描述" value="{{ var.description }}">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- 步骤编辑 -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-list-ol"></i> 工作流步骤</h5>
+                <span class="badge bg-secondary">{{ workflow.steps|length }} 步骤</span>
+            </div>
+            <div class="card-body" id="stepsContainer">
+                {% for step in workflow.steps %}
+                <div class="step-card" data-step-id="{{ step.id }}">
+                    <div class="step-header" onclick="toggleStep(this)">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge bg-primary me-2">{{ loop.index }}</span>
+                                <strong>{{ step.type }}</strong>
+                                <span class="text-muted ms-2">{{ step.description or "无描述" }}</span>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary" onclick="moveStepUp(this, event)" title="上移">
+                                    <i class="bi bi-arrow-up"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="moveStepDown(this, event)" title="下移">
+                                    <i class="bi bi-arrow-down"></i>
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="removeStep(this, event)" title="删除">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="step-body" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">步骤类型</label>
+                                    <select class="form-select" name="stepType" title="选择步骤类型">
+                                        {% for step_type in step_types %}
+                                        <option value="{{ step_type }}" {% if step.type == step_type %}selected{% endif %}>{{ step_type }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">描述</label>
+                                    <input type="text" class="form-control" name="stepDescription" value="{{ step.description or '' }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">选择器</label>
+                                    <input type="text" class="form-control" name="stepSelector" value="{{ step.selector or '' }}">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">XPath</label>
+                                    <input type="text" class="form-control" name="stepXpath" value="{{ step.xpath or '' }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">URL</label>
+                                    <input type="text" class="form-control" name="stepUrl" value="{{ step.url or '' }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">值</label>
+                                    <input type="text" class="form-control" name="stepValue" value="{{ step.value or '' }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">超时时间(毫秒)</label>
+                                    <input type="number" class="form-control" name="stepTimeout" value="{{ step.timeout or '' }}">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">等待条件</label>
+                                    <select class="form-select" name="stepWaitCondition">
+                                        <option value="">无</option>
+                                        <option value="visible" {% if step.wait_condition == "visible" %}selected{% endif %}>可见</option>
+                                        <option value="hidden" {% if step.wait_condition == "hidden" %}selected{% endif %}>隐藏</option>
+                                        <option value="enabled" {% if step.wait_condition == "enabled" %}selected{% endif %}>启用</option>
+                                        <option value="disabled" {% if step.wait_condition == "disabled" %}selected{% endif %}>禁用</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/workflow-editor.js"></script>
+{% endblock %}

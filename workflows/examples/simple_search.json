@@ -1,0 +1,40 @@
+{
+  "name": "simple_search",
+  "description": "简单的搜索示例",
+  "version": "1.0.0",
+  "steps": [
+    {
+      "id": "step_1",
+      "type": "navigate",
+      "url": "https://www.google.com",
+      "description": "打开Google首页"
+    },
+    {
+      "id": "step_2", 
+      "type": "fill",
+      "selector": "input[name='q']",
+      "value": "{{ search_query }}",
+      "description": "输入搜索关键词"
+    },
+    {
+      "id": "step_3",
+      "type": "click",
+      "selector": "input[value='Google 搜索']",
+      "description": "点击搜索按钮"
+    },
+    {
+      "id": "step_4",
+      "type": "wait",
+      "selector": "#search",
+      "timeout": 5000,
+      "description": "等待搜索结果加载"
+    }
+  ],
+  "variables": {
+    "search_query": {
+      "type": "string",
+      "description": "搜索关键词",
+      "default": "browser automation"
+    }
+  }
+} 

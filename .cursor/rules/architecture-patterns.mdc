@@ -1,0 +1,236 @@
+---
+description: 架构模式和设计原则，包含核心架构模式、设计模式、数据模型设计、依赖注入、错误处理架构等
+globs: 
+alwaysApply: false
+---
+# 架构模式和设计原则
+
+## 核心架构模式
+
+### 三阶段架构
+项目采用"录制-执行-自愈"三阶段架构：
+
+1. **录制阶段** ([src/core/recorder.py](mdc:src/core/recorder.py))
+   - 使用 Browser-Use 进行智能录制
+   - 生成 JSON 格式的工作流文件
+   - 支持变量提取和参数化
+
+2. **执行阶段** (待实现)
+   - 使用 Playwright 进行高性能执行
+   - 支持并发执行和批处理
+   - 模板渲染和上下文管理
+
+3. **自愈阶段** (待实现)
+   - 使用 Browser-Use 进行错误修复
+   - 自动适应页面变化
+   - 工作流自进化
+
+### 分层架构
+```
+┌─────────────────────────────────────┐
+│           CLI & Web UI              │  # 用户接口层
+├─────────────────────────────────────┤
+│         Core Business Logic         │  # 核心业务逻辑
+│  ┌─────────┬─────────┬─────────────┐ │
+│  │Recorder │Executor │   Healer    │ │
+│  └─────────┴─────────┴─────────────┘ │
+├─────────────────────────────────────┤
+│           Models & Utils            │  # 数据模型和工具
+├─────────────────────────────────────┤
+│      External Dependencies         │  # 外部依赖
+│   Browser-Use | Playwright | APIs  │
+└─────────────────────────────────────┘
+```
+
+## 设计模式
+
+### 1. 策略模式 (Strategy Pattern)
+用于不同的执行策略：
+
+```python
+from abc import ABC, abstractmethod
+
+class ExecutionStrategy(ABC):
+    @abstractmethod
+    async def execute(self, workflow: Workflow, context: Dict[str, str]) -> ExecutionResult:
+        pass
+
+class PlaywrightStrategy(ExecutionStrategy):
+    async def execute(self, workflow: Workflow, context: Dict[str, str]) -> ExecutionResult:
+        # Playwright 执行逻辑
+        pass
+
+class BrowserUseStrategy(ExecutionStrategy):
+    async def execute(self, workflow: Workflow, context: Dict[str, str]) -> ExecutionResult:
+        # Browser-Use 执行逻辑
+        pass
+```
+
+### 2. 工厂模式 (Factory Pattern)
+用于创建不同类型的步骤执行器：
+
+```python
+class StepExecutorFactory:
+    @staticmethod
+    def create_executor(step_type: StepType) -> StepExecutor:
+        if step_type == StepType.NAVIGATE:
+            return NavigateExecutor()
+        elif step_type == StepType.CLICK:
+            return ClickExecutor()
+        # ... 其他步骤类型
+```
+
+### 3. 观察者模式 (Observer Pattern)
+用于执行过程的监控和日志记录：
+
+```python
+class ExecutionObserver(ABC):
+    @abstractmethod
+    def on_step_start(self, step: WorkflowStep):
+        pass
+    
+    @abstractmethod
+    def on_step_complete(self, step: WorkflowStep, result: StepResult):
+        pass
+
+class LoggingObserver(ExecutionObserver):
+    def on_step_start(self, step: WorkflowStep):
+        logger.info("步骤开始", step_id=step.id, step_type=step.type)
+```
+
+## 数据模型设计
+
+### 核心模型
+参考 [src/models/workflow.py](mdc:src/models/workflow.py) 的设计：
+
+- **Workflow**: 工作流主模型
+- **WorkflowStep**: 工作流步骤
+- **WorkflowVariable**: 工作流变量
+- **ExecutionResult**: 执行结果
+- **StepResult**: 步骤执行结果
+
+### 模型设计原则
+1. 使用 Pydantic 进行数据验证
+2. 支持 JSON 序列化/反序列化
+3. 包含必要的元数据（创建时间、更新时间等）
+4. 支持版本控制
+
+## 依赖注入
+
+### 服务容器
+创建简单的依赖注入容器：
+
+```python
+class Container:
+    def __init__(self):
+        self._services = {}
+    
+    def register(self, service_type: type, implementation: object):
+        self._services[service_type] = implementation
+    
+    def get(self, service_type: type):
+        return self._services.get(service_type)
+
+# 全局容器实例
+container = Container()
+```
+
+### 使用示例
+```python
+# 注册服务
+container.register(WorkflowRecorder, WorkflowRecorder())
+container.register(ScriptCleaner, ScriptCleaner())
+
+# 使用服务
+recorder = container.get(WorkflowRecorder)
+```
+
+## 错误处理架构
+
+### 异常层次结构
+```python
+class GaiaRPAError(Exception):
+    """Gaia RPA 基础异常"""
+    pass
+
+class WorkflowError(GaiaRPAError):
+    """工作流相关异常"""
+    pass
+
+class RecordingError(WorkflowError):
+    """录制异常"""
+    pass
+
+class ExecutionError(WorkflowError):
+    """执行异常"""
+    pass
+
+class HealingError(WorkflowError):
+    """自愈异常"""
+    pass
+```
+
+### 错误恢复策略
+1. **重试机制**: 对临时性错误进行重试
+2. **降级策略**: 当主要功能失败时使用备用方案
+3. **熔断器**: 防止级联失败
+4. **自愈机制**: 使用 Browser-Use 进行智能修复
+
+## 并发和异步设计
+
+### 异步优先
+- 所有 I/O 操作使用异步
+- 使用 `asyncio` 进行并发控制
+- 避免阻塞操作
+
+### 并发控制
+```python
+import asyncio
+from asyncio import Semaphore
+
+class ConcurrentExecutor:
+    def __init__(self, max_concurrent: int = 5):
+        self.semaphore = Semaphore(max_concurrent)
+    
+    async def execute_batch(self, workflows: List[Workflow]) -> List[ExecutionResult]:
+        tasks = [self._execute_single(workflow) for workflow in workflows]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+    
+    async def _execute_single(self, workflow: Workflow) -> ExecutionResult:
+        async with self.semaphore:
+            # 执行单个工作流
+            pass
+```
+
+## 插件化架构
+
+### 插件接口
+```python
+class Plugin(ABC):
+    @abstractmethod
+    def get_name(self) -> str:
+        pass
+    
+    @abstractmethod
+    async def initialize(self):
+        pass
+    
+    @abstractmethod
+    async def execute(self, context: Dict[str, Any]) -> Any:
+        pass
+```
+
+### 插件管理器
+```python
+class PluginManager:
+    def __init__(self):
+        self.plugins: Dict[str, Plugin] = {}
+    
+    def register_plugin(self, plugin: Plugin):
+        self.plugins[plugin.get_name()] = plugin
+    
+    async def execute_plugin(self, name: str, context: Dict[str, Any]):
+        if plugin := self.plugins.get(name):
+            return await plugin.execute(context)
+        raise PluginNotFoundError(f"Plugin {name} not found")
+```

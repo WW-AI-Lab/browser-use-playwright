@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}{{ workflow.name }} - Browser-use-Playwright{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>{{ workflow.name }}</h1>
+        <p class="text-muted">{{ workflow.description or "无描述" }}</p>
+    </div>
+    <div class="btn-group">
+        <a href="/workflows/{{ workflow.name }}/edit" class="btn btn-primary">
+            <i class="bi bi-pencil"></i> 编辑
+        </a>
+        <button class="btn btn-outline-success" onclick="cleanWorkflow()">
+            <i class="bi bi-magic"></i> 清理优化
+        </button>
+        <a href="/" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> 返回
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-list-ol"></i> 工作流步骤 ({{ workflow.steps|length }})</h5>
+            </div>
+            <div class="card-body">
+                {% if workflow.steps %}
+                <div class="list-group">
+                    {% for step in workflow.steps %}
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">
+                                <span class="badge bg-secondary">{{ loop.index }}</span>
+                                {{ step.type }}
+                            </h6>
+                            <small>{{ step.created_at.strftime('%H:%M:%S') if step.created_at else "" }}</small>
+                        </div>
+                        <p class="mb-1">{{ step.description or "无描述" }}</p>
+                        {% if step.selector %}
+                        <small class="text-muted"><strong>选择器:</strong> {{ step.selector }}</small><br>
+                        {% endif %}
+                        {% if step.url %}
+                        <small class="text-muted"><strong>URL:</strong> {{ step.url }}</small><br>
+                        {% endif %}
+                        {% if step.value %}
+                        <small class="text-muted"><strong>值:</strong> {{ step.value }}</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">没有步骤</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-info-circle"></i> 工作流信息</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>版本:</strong></td>
+                        <td>{{ workflow.version }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>创建时间:</strong></td>
+                        <td>{{ workflow.created_at.strftime('%Y-%m-%d %H:%M') if workflow.created_at else "-" }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>更新时间:</strong></td>
+                        <td>{{ workflow.updated_at.strftime('%Y-%m-%d %H:%M') if workflow.updated_at else "-" }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>步骤数:</strong></td>
+                        <td>{{ workflow.steps|length }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>变量数:</strong></td>
+                        <td>{{ workflow.variables|length }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        {% if workflow.variables %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5><i class="bi bi-gear"></i> 变量</h5>
+            </div>
+            <div class="card-body">
+                {% for var_name, var in workflow.variables.items() %}
+                <div class="mb-2">
+                    <strong>{{ var_name }}:</strong> {{ var.type }}<br>
+                    <small class="text-muted">{{ var.description }}</small>
+                    {% if var.default %}
+                    <br><small><strong>默认值:</strong> {{ var.default }}</small>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function cleanWorkflow() {
+        if (!confirm('确定要清理和优化这个工作流吗？')) return;
+        
+        try {
+            const response = await fetch(`/api/workflows/{{ workflow.name }}/clean`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                alert('工作流清理完成！\n' + 
+                      '优化次数: ' + result.optimization_report.total_optimizations);
+                location.reload();
+            } else {
+                throw new Error('清理失败');
+            }
+        } catch (error) {
+            alert('清理失败: ' + error.message);
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,21 @@
+# 开发环境上下文示例
+environment: "development"
+base_url: "http://localhost:3000"
+
+# 用户凭据 (示例)
+credentials:
+  username: "test@example.com"
+  password: "password123"
+
+# 表单数据示例
+form_data:
+  first_name: "张三"
+  last_name: "李四"
+  email: "zhangsan@example.com"
+  phone: "13800138000"
+
+# 等待配置
+timeouts:
+  page_load: 30
+  element_wait: 10
+  action_delay: 1 

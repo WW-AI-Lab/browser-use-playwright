@@ -1,0 +1,97 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
+config.local.yml
+
+# Chrome profiles (contains user data)
+chrome-profiles/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Playwright browsers
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# User workflows (keep examples)
+workflows/user/
+workflows/backups/
+
+# Personal workflow files (keep only examples)
+workflows/*.json
+# Personal data files
+*.pdf
+
+# Scripts backup
+scripts_backup/
+
+# Test files
+ui-test.md

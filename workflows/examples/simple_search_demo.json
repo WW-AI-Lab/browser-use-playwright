@@ -1,0 +1,60 @@
+{
+  "name": "simple_search_demo",
+  "description": "简单的搜索演示工作流",
+  "version": "1.0.0",
+  "created_at": "2024-12-19T00:00:00Z",
+  "steps": [
+    {
+      "id": "1",
+      "type": "navigate",
+      "action": "goto",
+      "url": "https://www.google.com",
+      "description": "打开Google搜索页面"
+    },
+    {
+      "id": "2", 
+      "type": "input",
+      "action": "fill",
+      "selector": "input[name='q']",
+      "value": "{{ search_term }}",
+      "description": "输入搜索关键词"
+    },
+    {
+      "id": "3",
+      "type": "click",
+      "action": "click", 
+      "selector": "input[name='btnK']",
+      "description": "点击搜索按钮"
+    },
+    {
+      "id": "4",
+      "type": "wait",
+      "action": "wait_for_selector",
+      "selector": "#search",
+      "timeout": 5000,
+      "description": "等待搜索结果加载"
+    },
+    {
+      "id": "5",
+      "type": "extract",
+      "action": "extract_text",
+      "selector": "#search .g h3",
+      "description": "提取搜索结果标题",
+      "output_key": "search_results"
+    }
+  ],
+  "variables": {
+    "search_term": {
+      "type": "string",
+      "description": "搜索关键词",
+      "default": "browser automation",
+      "required": true
+    }
+  },
+  "settings": {
+    "headless": false,
+    "timeout": 30000,
+    "retry_count": 3,
+    "screenshot_on_error": true
+  }
+} 

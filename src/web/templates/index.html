@@ -1,0 +1,854 @@
+{% extends "base.html" %}
+
+{% block title %}工作流管理 - Browser-use-Playwright{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>工作流管理</h1>
+    <div class="btn-group">
+        <button class="btn btn-primary" onclick="showRecordingModal()">
+            <i class="bi bi-magic"></i> 录制
+        </button>
+        <button class="btn btn-success" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise"></i> 刷新
+        </button>
+    </div>
+</div>
+
+{% if workflows %}
+<div class="row">
+    {% for workflow in workflows %}
+    <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{{ workflow.name }}</h5>
+                <p class="card-text">{{ workflow.description or "无描述" }}</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted">
+                        <i class="bi bi-list-ol"></i> {{ workflow.steps_count }} 步骤
+                    </small>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-success btn-sm" onclick="runWorkflow('{{ workflow.name }}')">
+                            <i class="bi bi-play-fill"></i> 运行
+                        </button>
+                        <a href="/workflows/{{ workflow.name }}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-eye"></i> 查看
+                        </a>
+                        <a href="/workflows/{{ workflow.name }}/edit" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-pencil"></i> 编辑
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-folder2-open display-1 text-muted"></i>
+    <h3 class="mt-3">没有找到工作流</h3>
+    <p class="text-muted">请先录制一些工作流</p>
+</div>
+{% endif %}
+
+<!-- 执行状态模态框 -->
+<div class="modal fade" id="executionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">工作流执行状态</h5>
+                <button type="button" class="btn-close" onclick="closeModal()" title="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div id="executionStatus">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary"></div>
+                        <p class="mt-2">正在执行工作流...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">关闭</button>
+                <button type="button" class="btn btn-danger" id="cancelBtn" onclick="cancelExecution()">停止执行</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 录制配置模态框 -->
+<div class="modal fade" id="recordingModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">录制新工作流</h5>
+                <button type="button" class="btn-close" onclick="closeRecordingModal()" title="关闭"></button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <form id="recordingForm">
+                    <div class="mb-3">
+                        <label for="workflowName" class="form-label">工作流名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="workflowName" name="name" required 
+                               placeholder="例如：google_search_books">
+                        <div class="form-text">只能包含字母、数字和下划线</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="workflowDescription" class="form-label">工作流描述</label>
+                        <input type="text" class="form-control" id="workflowDescription" name="description"
+                               placeholder="例如：在Google搜索指定的书籍">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="recordingMode" class="form-label">录制模式 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="recordingMode" name="mode" required onchange="toggleModeFields()">
+                            <option value="guided">引导式录制（AI自动执行）</option>
+                            <option value="interactive">交互式录制（手动操作）</option>
+                        </select>
+                        <div class="form-text">
+                            <strong>引导式</strong>：描述任务，AI自动执行并录制<br>
+                            <strong>交互式</strong>：手动在浏览器中操作，系统自动记录
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="taskDescriptionGroup">
+                        <label for="taskDescription" class="form-label">任务描述 <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="taskDescription" name="task_description" rows="3" 
+                                  placeholder="例如：在Google搜索'Python编程'，然后点击第一个搜索结果"></textarea>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <div class="form-text">详细描述你希望AI执行的操作步骤</div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="optimizeTask()" id="optimizeBtn">
+                                <i class="bi bi-lightbulb"></i> 优化任务
+                            </button>
+                        </div>
+                        
+                        <!-- 优化结果展示区域 -->
+                        <div id="optimizationResult" class="mt-3" style="display: none;">
+                            <div class="card">
+                                <div class="card-header bg-light py-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold text-success">
+                                            <i class="bi bi-check-circle"></i> 任务已优化
+                                        </span>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="revertOptimization()">
+                                            撤销
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="card-body py-2">
+                                    <div class="mb-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <strong class="small">优化后的任务：</strong>
+                                            <small class="text-muted">耗时 <span id="optimizationTime">-</span>秒</small>
+                                        </div>
+                                        <div id="optimizedTaskText" class="p-2 bg-light border rounded small" style="max-height: 100px; overflow-y: auto;"></div>
+                                    </div>
+                                    <div class="mb-0">
+                                        <strong class="small">改进点：</strong>
+                                        <ul id="improvementsList" class="small mb-0 mt-1"></ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="autoOptimize" name="auto_optimize" checked>
+                            <label class="form-check-label" for="autoOptimize">
+                                自动优化任务描述（推荐）
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="headlessMode" name="headless">
+                            <label class="form-check-label" for="headlessMode">
+                                无头模式（后台运行，不显示浏览器窗口）
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeRecordingModal()">取消</button>
+                <button type="button" class="btn btn-primary" onclick="startRecording()">
+                    <i class="bi bi-magic"></i> 开始录制
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 录制状态模态框 -->
+<div class="modal fade" id="recordingStatusModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">录制状态</h5>
+                <button type="button" class="btn-close" onclick="closeRecordingStatusModal()" title="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div id="recordingStatus">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary"></div>
+                        <p class="mt-2">正在启动录制...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeRecordingStatusModal()">关闭</button>
+                <button type="button" class="btn btn-danger" id="stopRecordingBtn" onclick="stopRecording()">停止录制</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentTaskId = null;
+let currentRecordingTaskId = null;
+
+// 运行工作流
+async function runWorkflow(workflowName) {
+    try {
+        console.log('开始运行工作流:', workflowName);
+        
+        // 显示模态框
+        showModal();
+        resetStatus();
+        
+        // 提交执行请求
+        const response = await fetch(`/api/workflows/${workflowName}/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                variables: {},
+                headless: false,
+                timeout: 60
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`执行请求失败: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        currentTaskId = result.task_id;
+        console.log('任务已提交，ID:', currentTaskId);
+        
+        // 开始轮询状态
+        pollStatus(currentTaskId);
+        
+    } catch (error) {
+        console.error('执行工作流失败:', error);
+        showError(`执行失败: ${error.message}`);
+    }
+}
+
+// 轮询执行状态
+async function pollStatus(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}/status`);
+        if (!response.ok) {
+            throw new Error('获取状态失败');
+        }
+        
+        const statusData = await response.json();
+        console.log('任务状态:', statusData);
+        
+        updateStatus(statusData);
+        
+        if (statusData.status === 'running') {
+            setTimeout(() => pollStatus(taskId), 2000);
+        } else {
+            showResult(statusData);
+        }
+        
+    } catch (error) {
+        console.error('获取执行状态失败:', error);
+        showError(`获取状态失败: ${error.message}`);
+    }
+}
+
+// 显示模态框
+function showModal() {
+    const modalEl = document.getElementById('executionModal');
+    modalEl.style.display = 'block';
+    modalEl.classList.add('show');
+    document.body.classList.add('modal-open');
+    
+    // 创建背景
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop fade show';
+    backdrop.id = 'modal-backdrop';
+    document.body.appendChild(backdrop);
+}
+
+// 关闭模态框
+function closeModal() {
+    const modalEl = document.getElementById('executionModal');
+    modalEl.style.display = 'none';
+    modalEl.classList.remove('show');
+    document.body.classList.remove('modal-open');
+    
+    const backdrop = document.getElementById('modal-backdrop');
+    if (backdrop) {
+        backdrop.remove();
+    }
+}
+
+// 重置状态
+function resetStatus() {
+    const statusDiv = document.getElementById('executionStatus');
+    const cancelBtn = document.getElementById('cancelBtn');
+    
+    cancelBtn.style.display = 'inline-block';
+    currentTaskId = null;
+    
+    statusDiv.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2">正在启动执行...</p>
+        </div>
+    `;
+}
+
+// 更新状态
+function updateStatus(statusData) {
+    const statusDiv = document.getElementById('executionStatus');
+    
+    if (statusData.status === 'running') {
+        const progress = statusData.progress || {};
+        const progressPercent = progress.completed_steps && progress.total_steps ? 
+            Math.round((progress.completed_steps / progress.total_steps) * 100) : 0;
+        
+        statusDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary"></div>
+                <p class="mt-2">正在执行工作流... ${progressPercent}%</p>
+                ${progress.total_steps ? `<p class="text-muted">进度: ${progress.completed_steps || 0}/${progress.total_steps} 步骤</p>` : ''}
+            </div>
+        `;
+    }
+}
+
+// 显示结果
+function showResult(statusData) {
+    const statusDiv = document.getElementById('executionStatus');
+    const cancelBtn = document.getElementById('cancelBtn');
+    
+    cancelBtn.style.display = 'none';
+    
+    if (statusData.status === 'completed') {
+        const result = statusData.result || {};
+        const successRate = result.success_rate || 0;
+        
+        statusDiv.innerHTML = `
+            <div class="alert alert-success">
+                <h6>✅ 执行完成</h6>
+                <p>工作流执行成功完成</p>
+                <p><strong>成功率:</strong> ${(successRate * 100).toFixed(1)}%</p>
+                <p><strong>总步骤:</strong> ${result.total_steps || 0}</p>
+            </div>
+        `;
+    } else if (statusData.status === 'failed') {
+        const result = statusData.result || {};
+        
+        statusDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h6>⚠️ 执行失败</h6>
+                <p>${result.error_message || '执行过程中发生未知错误'}</p>
+            </div>
+        `;
+    }
+}
+
+// 显示错误
+function showError(message) {
+    const statusDiv = document.getElementById('executionStatus');
+    statusDiv.innerHTML = `
+        <div class="alert alert-danger">
+            <p>${message}</p>
+        </div>
+    `;
+}
+
+// 取消执行
+async function cancelExecution() {
+    if (!currentTaskId) return;
+    
+    try {
+        const response = await fetch(`/api/tasks/${currentTaskId}/cancel`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            showError('正在取消执行...');
+        }
+    } catch (error) {
+        console.error('取消执行失败:', error);
+    }
+}
+
+// ============ 录制功能 ============
+
+// 显示录制配置模态框
+function showRecordingModal() {
+    const modalEl = document.getElementById('recordingModal');
+    modalEl.style.display = 'block';
+    modalEl.classList.add('show');
+    document.body.classList.add('modal-open');
+    
+    // 创建背景
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop fade show';
+    backdrop.id = 'recording-modal-backdrop';
+    document.body.appendChild(backdrop);
+    
+    // 重置表单
+    document.getElementById('recordingForm').reset();
+    toggleModeFields();
+}
+
+// 关闭录制配置模态框
+function closeRecordingModal() {
+    const modalEl = document.getElementById('recordingModal');
+    modalEl.style.display = 'none';
+    modalEl.classList.remove('show');
+    document.body.classList.remove('modal-open');
+    
+    const backdrop = document.getElementById('recording-modal-backdrop');
+    if (backdrop) {
+        backdrop.remove();
+    }
+}
+
+// 切换录制模式字段显示
+function toggleModeFields() {
+    const mode = document.getElementById('recordingMode').value;
+    const taskDescriptionGroup = document.getElementById('taskDescriptionGroup');
+    const taskDescriptionInput = document.getElementById('taskDescription');
+    
+    if (mode === 'guided') {
+        taskDescriptionGroup.style.display = 'block';
+        taskDescriptionInput.required = true;
+    } else {
+        taskDescriptionGroup.style.display = 'none';
+        taskDescriptionInput.required = false;
+    }
+}
+
+
+
+// 显示录制状态模态框
+function showRecordingStatusModal() {
+    const modalEl = document.getElementById('recordingStatusModal');
+    modalEl.style.display = 'block';
+    modalEl.classList.add('show');
+    document.body.classList.add('modal-open');
+    
+    // 创建背景
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop fade show';
+    backdrop.id = 'recording-status-modal-backdrop';
+    document.body.appendChild(backdrop);
+    
+    // 重置状态
+    resetRecordingStatus();
+}
+
+// 关闭录制状态模态框
+function closeRecordingStatusModal() {
+    const modalEl = document.getElementById('recordingStatusModal');
+    modalEl.style.display = 'none';
+    modalEl.classList.remove('show');
+    document.body.classList.remove('modal-open');
+    
+    const backdrop = document.getElementById('recording-status-modal-backdrop');
+    if (backdrop) {
+        backdrop.remove();
+    }
+}
+
+// 重置录制状态
+function resetRecordingStatus() {
+    const statusDiv = document.getElementById('recordingStatus');
+    const stopBtn = document.getElementById('stopRecordingBtn');
+    
+    stopBtn.style.display = 'inline-block';
+    
+    statusDiv.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-primary"></div>
+            <p class="mt-2">正在启动录制...</p>
+        </div>
+    `;
+}
+
+// 轮询录制状态
+async function pollRecordingStatus(taskId) {
+    try {
+        const response = await fetch(`/api/recording/${taskId}/status`);
+        if (!response.ok) {
+            throw new Error('获取录制状态失败');
+        }
+        
+        const statusData = await response.json();
+        console.log('录制状态:', statusData);
+        
+        updateRecordingStatus(statusData);
+        
+        // 如果还在录制中，继续轮询
+        if (statusData.status === 'recording' || statusData.status === 'starting') {
+            setTimeout(() => pollRecordingStatus(taskId), 2000);
+        } else {
+            showRecordingResult(statusData);
+        }
+        
+    } catch (error) {
+        console.error('获取录制状态失败:', error);
+        showRecordingError(`获取录制状态失败: ${error.message}`);
+    }
+}
+
+// 更新录制状态
+function updateRecordingStatus(statusData) {
+    const statusDiv = document.getElementById('recordingStatus');
+    
+    if (statusData.status === 'starting') {
+        statusDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary"></div>
+                <p class="mt-2">正在启动录制...</p>
+                <p class="text-muted">模式: ${statusData.mode === 'guided' ? '引导式' : '交互式'}</p>
+            </div>
+        `;
+    } else if (statusData.status === 'recording') {
+        const startTime = new Date(statusData.start_time * 1000);
+        const elapsed = Math.round((Date.now() - startTime.getTime()) / 1000);
+        
+        statusDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-success"></div>
+                <p class="mt-2">🎬 正在录制工作流...</p>
+                <p class="text-muted">工作流: ${statusData.name}</p>
+                <p class="text-muted">已录制: ${elapsed}秒</p>
+                ${statusData.mode === 'interactive' ? 
+                    '<div class="alert alert-info mt-3"><small>💡 请在打开的浏览器中进行操作，系统会自动记录您的操作</small></div>' : 
+                    '<div class="alert alert-info mt-3"><small>🤖 AI正在自动执行任务并录制操作步骤</small></div>'
+                }
+            </div>
+        `;
+    }
+}
+
+// 显示录制结果
+function showRecordingResult(statusData) {
+    const statusDiv = document.getElementById('recordingStatus');
+    const stopBtn = document.getElementById('stopRecordingBtn');
+    
+    stopBtn.style.display = 'none';
+    
+    if (statusData.status === 'completed' && statusData.workflow) {
+        const workflow = statusData.workflow;
+        
+        statusDiv.innerHTML = `
+            <div class="alert alert-success">
+                <h6>✅ 录制完成</h6>
+                <p>工作流录制成功完成</p>
+                <p><strong>工作流名称:</strong> ${workflow.name}</p>
+                <p><strong>步骤数量:</strong> ${workflow.steps_count}</p>
+                <div class="mt-3">
+                    <button class="btn btn-primary btn-sm" onclick="editWorkflow('${workflow.name}')">
+                        <i class="bi bi-pencil"></i> 编辑工作流
+                    </button>
+                    <button class="btn btn-secondary btn-sm ms-2" onclick="closeRecordingStatusModal(); location.reload();">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新列表
+                    </button>
+                </div>
+            </div>
+        `;
+    } else if (statusData.status === 'failed') {
+        statusDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h6>⚠️ 录制失败</h6>
+                <p>${statusData.error || '录制过程中发生未知错误'}</p>
+                <div class="mt-3">
+                    <button class="btn btn-secondary btn-sm" onclick="closeRecordingStatusModal()">
+                        <i class="bi bi-arrow-left"></i> 返回
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// 显示录制错误
+function showRecordingError(message) {
+    const statusDiv = document.getElementById('recordingStatus');
+    const stopBtn = document.getElementById('stopRecordingBtn');
+    
+    stopBtn.style.display = 'none';
+    
+    statusDiv.innerHTML = `
+        <div class="alert alert-danger">
+            <h6>❌ 错误</h6>
+            <p>${message}</p>
+        </div>
+    `;
+}
+
+// 停止录制
+async function stopRecording() {
+    if (!currentRecordingTaskId) return;
+    
+    try {
+        const response = await fetch(`/api/recording/${currentRecordingTaskId}/stop`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            showRecordingError('正在停止录制...');
+        }
+    } catch (error) {
+        console.error('停止录制失败:', error);
+        showRecordingError(`停止录制失败: ${error.message}`);
+    }
+}
+
+// 编辑工作流（跳转到编辑页面）
+function editWorkflow(workflowName) {
+    window.location.href = `/workflows/${workflowName}/edit`;
+}
+
+// ============ 任务优化功能 ============
+
+let originalTaskDescription = '';  // 保存原始任务描述
+let isTaskOptimized = false;       // 标记任务是否已优化
+
+// 优化任务描述
+async function optimizeTask() {
+    const taskTextarea = document.getElementById('taskDescription');
+    const optimizeBtn = document.getElementById('optimizeBtn');
+    const taskDescription = taskTextarea.value.trim();
+    
+    if (!taskDescription) {
+        alert('请先输入任务描述');
+        return;
+    }
+    
+    if (taskDescription.length < 10) {
+        alert('任务描述过短，请提供更详细的描述');
+        return;
+    }
+    
+    try {
+        // 保存原始任务描述
+        if (!isTaskOptimized) {
+            originalTaskDescription = taskDescription;
+        }
+        
+        // 更新按钮状态
+        optimizeBtn.disabled = true;
+        optimizeBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 优化中...';
+        
+        console.log('开始优化任务描述:', taskDescription);
+        
+        // 调用优化API
+        const response = await fetch('/api/tasks/optimize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                task_description: taskDescription,
+                language: 'zh'
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || '任务优化失败');
+        }
+        
+        const result = await response.json();
+        console.log('优化结果:', result);
+        
+        if (result.success) {
+            // 显示优化结果
+            showOptimizationResult(result);
+            
+            // 更新任务描述
+            taskTextarea.value = result.optimized_task;
+            isTaskOptimized = true;
+            
+            // 更新按钮
+            optimizeBtn.innerHTML = '<i class="bi bi-check-circle"></i> 已优化';
+            optimizeBtn.disabled = false;
+            optimizeBtn.classList.remove('btn-outline-primary');
+            optimizeBtn.classList.add('btn-outline-success');
+            
+        } else {
+            throw new Error(result.error_message || '优化失败');
+        }
+        
+    } catch (error) {
+        console.error('任务优化失败:', error);
+        alert(`任务优化失败: ${error.message}`);
+        
+        // 恢复按钮状态
+        optimizeBtn.disabled = false;
+        optimizeBtn.innerHTML = '<i class="bi bi-lightbulb"></i> 优化任务';
+    }
+}
+
+// 显示优化结果
+function showOptimizationResult(result) {
+    const resultDiv = document.getElementById('optimizationResult');
+    const optimizedTaskText = document.getElementById('optimizedTaskText');
+    const improvementsList = document.getElementById('improvementsList');
+    const optimizationTime = document.getElementById('optimizationTime');
+    
+    // 显示优化后的任务
+    optimizedTaskText.textContent = result.optimized_task;
+    
+    // 显示改进点
+    improvementsList.innerHTML = '';
+    result.improvements.forEach(improvement => {
+        const li = document.createElement('li');
+        li.textContent = improvement;
+        improvementsList.appendChild(li);
+    });
+    
+    // 显示优化时间
+    optimizationTime.textContent = result.optimization_time;
+    
+    // 显示结果区域
+    resultDiv.style.display = 'block';
+}
+
+// 撤销优化
+function revertOptimization() {
+    if (!isTaskOptimized || !originalTaskDescription) {
+        return;
+    }
+    
+    const taskTextarea = document.getElementById('taskDescription');
+    const optimizeBtn = document.getElementById('optimizeBtn');
+    const resultDiv = document.getElementById('optimizationResult');
+    
+    // 恢复原始任务描述
+    taskTextarea.value = originalTaskDescription;
+    
+    // 隐藏优化结果
+    resultDiv.style.display = 'none';
+    
+    // 重置按钮状态
+    optimizeBtn.innerHTML = '<i class="bi bi-lightbulb"></i> 优化任务';
+    optimizeBtn.disabled = false;
+    optimizeBtn.classList.remove('btn-outline-success');
+    optimizeBtn.classList.add('btn-outline-primary');
+    
+    // 重置标记
+    isTaskOptimized = false;
+    originalTaskDescription = '';
+    
+    console.log('已撤销任务优化');
+}
+
+// 修改开始录制函数，包含自动优化选项
+async function startRecording() {
+    try {
+        // 获取表单数据
+        const form = document.getElementById('recordingForm');
+        const formData = new FormData(form);
+        
+        // 验证必填字段
+        const name = formData.get('name');
+        const mode = formData.get('mode');
+        
+        if (!name || !name.trim()) {
+            alert('请输入工作流名称');
+            return;
+        }
+        
+        // 验证工作流名称格式
+        if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+            alert('工作流名称只能包含字母、数字和下划线');
+            return;
+        }
+        
+        if (mode === 'guided') {
+            const taskDescription = formData.get('task_description');
+            if (!taskDescription || !taskDescription.trim()) {
+                alert('引导式录制需要填写任务描述');
+                return;
+            }
+        }
+        
+        // 构建请求数据
+        const requestData = {
+            name: name.trim(),
+            description: formData.get('description') || '',
+            task_description: formData.get('task_description') || '',
+            mode: mode,
+            headless: formData.has('headless'),
+            auto_optimize: formData.has('auto_optimize')  // 添加自动优化选项
+        };
+        
+        console.log('开始录制:', requestData);
+        
+        // 关闭配置模态框
+        closeRecordingModal();
+        
+        // 显示录制状态模态框
+        showRecordingStatusModal();
+        
+        // 发送录制请求
+        const response = await fetch('/api/recording/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || '启动录制失败');
+        }
+        
+        const result = await response.json();
+        currentRecordingTaskId = result.task_id;
+        
+        console.log('录制任务已启动:', result);
+        
+        // 如果有优化信息，显示在状态中
+        if (result.optimization && result.optimization.applied) {
+            console.log('任务已自动优化:', result.optimization);
+        }
+        
+        // 开始轮询录制状态
+        pollRecordingStatus(currentRecordingTaskId);
+        
+    } catch (error) {
+        console.error('启动录制失败:', error);
+        showRecordingError(`启动录制失败: ${error.message}`);
+    }
+}
+
+// 修改切换录制模式字段显示
+function toggleModeFields() {
+    const mode = document.getElementById('recordingMode').value;
+    const taskDescriptionGroup = document.getElementById('taskDescriptionGroup');
+    const taskDescriptionInput = document.getElementById('taskDescription');
+    const autoOptimizeCheckbox = document.getElementById('autoOptimize');
+    
+    if (mode === 'guided') {
+        taskDescriptionGroup.style.display = 'block';
+        taskDescriptionInput.required = true;
+        autoOptimizeCheckbox.closest('.form-check').style.display = 'block';
+    } else {
+        taskDescriptionGroup.style.display = 'none';
+        taskDescriptionInput.required = false;
+        autoOptimizeCheckbox.closest('.form-check').style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

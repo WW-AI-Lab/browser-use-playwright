@@ -1,0 +1,41 @@
+# 基础配置
+app:
+  name: "browser-use-playwright"
+  version: "1.0.0"
+  debug: false
+
+# 录制配置
+recording:
+  browser_use:
+    model: "gpt-4o"  # 可通过环境变量覆盖
+    headless: false
+    timeout: 30
+  output_dir: "./workflows/"
+  auto_cleanup: true
+
+# 执行配置
+execution:
+  playwright:
+    browser: "chromium"
+    headless: false
+    timeout: 30
+    user_data_dir: "./chrome-profiles/"
+  concurrent_limit: 10
+  retry_count: 3
+
+# Browser-Use自愈配置
+healing:
+  browser_use:
+    model: "gpt-4o"  # 可通过环境变量覆盖
+    headless: false
+    timeout: 60
+  max_attempts: 3
+  auto_save: true
+  backup_original: true
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "structured"
+  file: "./logs/browser-use-playwright.log"
+  rotation: "daily" 

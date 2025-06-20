@@ -1,0 +1,142 @@
+---
+description: Python 编码规范，包含风格、错误处理、日志记录、配置管理等
+globs: 
+alwaysApply: false
+---
+# 编码规范和最佳实践
+
+## Python 编码规范
+
+### 代码风格
+- 遵循 PEP 8 标准
+- 使用 4 个空格缩进，不使用制表符
+- 行长度限制为 88 字符（Black 格式化器标准）
+- 使用 f-string 进行字符串格式化
+
+### 导入规范
+```python
+# 标准库导入
+import asyncio
+from pathlib import Path
+from typing import Dict, List, Optional
+
+# 第三方库导入
+import typer
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+# 本地导入
+from ..core.recorder import WorkflowRecorder
+from ..models.workflow import Workflow
+from ..utils.logger import logger
+```
+
+### 类型注解
+- 必须为所有函数参数和返回值添加类型注解
+- 使用 `typing` 模块的类型提示
+- 对于复杂类型，优先使用 Pydantic 模型
+
+```python
+from typing import Dict, List, Optional
+from pydantic import BaseModel
+
+def process_workflow(workflow: Workflow, context: Dict[str, str]) -> Optional[ExecutionResult]:
+    """处理工作流执行"""
+    pass
+```
+
+### 异步编程
+- 使用 `async/await` 语法
+- 异步函数必须以 `async def` 开头
+- 调用异步函数时必须使用 `await`
+
+```python
+async def record_workflow(self, name: str) -> Workflow:
+    """录制工作流"""
+    workflow = await self._create_workflow(name)
+    return workflow
+```
+
+## 文档字符串
+使用 Google 风格的文档字符串：
+
+```python
+def execute_workflow(workflow_path: str, context: Dict[str, str]) -> ExecutionResult:
+    """执行工作流
+    
+    Args:
+        workflow_path: 工作流文件路径
+        context: 执行上下文变量
+        
+    Returns:
+        ExecutionResult: 执行结果对象
+        
+    Raises:
+        WorkflowNotFoundError: 当工作流文件不存在时
+        ExecutionError: 当执行失败时
+    """
+    pass
+```
+
+## 错误处理
+- 使用具体的异常类型，避免使用裸露的 `except:`
+- 创建自定义异常类继承自适当的基类
+- 记录异常信息到日志
+
+```python
+class WorkflowError(Exception):
+    """工作流相关错误基类"""
+    pass
+
+class WorkflowNotFoundError(WorkflowError):
+    """工作流未找到错误"""
+    pass
+
+try:
+    result = await execute_workflow(workflow_path)
+except WorkflowNotFoundError as e:
+    logger.error("工作流未找到", workflow_path=workflow_path, error=str(e))
+    raise
+except Exception as e:
+    logger.error("执行失败", error=str(e))
+    raise WorkflowError(f"执行失败: {e}") from e
+```
+
+## 日志记录
+使用 [src/utils/logger.py](mdc:src/utils/logger.py) 中的结构化日志：
+
+```python
+from ..utils.logger import logger
+
+# 信息日志
+logger.info("工作流录制开始", workflow_name=name)
+
+# 错误日志
+logger.error("工作流执行失败", workflow_name=name, error=str(e))
+
+# 调试日志
+logger.debug("步骤执行详情", step_id=step.id, step_type=step.type)
+```
+
+## 配置管理
+- 使用 [config.yml](mdc:config.yml) 进行配置管理
+- 环境变量优先于配置文件
+- 敏感信息通过环境变量传递
+
+## 测试规范
+- 测试文件放在 `tests/` 目录下
+- 测试文件名以 `test_` 开头
+- 使用 pytest 作为测试框架
+- 异步测试使用 `pytest-asyncio`
+
+```python
+import pytest
+from src.core.recorder import WorkflowRecorder
+
+@pytest.mark.asyncio
+async def test_workflow_recording():
+    """测试工作流录制功能"""
+    recorder = WorkflowRecorder()
+    workflow = await recorder.record_workflow("test_workflow")
+    assert workflow.name == "test_workflow"
+```

@@ -1,0 +1,84 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Gaia RPA Cursor Rules
+
+本目录包含了Gaia RPA项目的完整开发规范和最佳实践，用于指导后续开发工作。
+
+## 规则文件说明
+
+### 1. project-overview.mdc
+- **项目概览**: 项目简介、核心架构、技术栈
+- **项目结构**: 目录结构说明和关键文件
+- **开发阶段**: 当前开发进度和计划
+
+### 2. coding-standards.mdc
+- **Python编码规范**: 代码风格、类型注解、异步编程
+- **文档字符串**: Google风格的文档规范
+- **错误处理**: 异常处理和日志记录
+- **测试规范**: 单元测试和异步测试
+
+### 3. architecture-patterns.mdc
+- **核心架构模式**: 三阶段架构和分层设计
+- **设计模式**: 策略模式、工厂模式、观察者模式
+- **数据模型设计**: Pydantic模型和序列化
+- **并发和异步设计**: 异步编程和并发控制
+
+### 4. web-ui-development.mdc
+- **FastAPI开发规范**: API路由设计和错误处理
+- **模板开发规范**: Jinja2模板和组件化设计
+- **前端JavaScript规范**: 模块化和异步请求处理
+- **性能优化**: 前端和后端优化策略
+
+### 5. browser-automation.mdc
+- **Browser-Use集成**: 录制阶段实现和配置
+- **Playwright执行规范**: 执行器架构和步骤执行器
+- **浏览器配置管理**: Chrome Profile复用和浏览器池
+- **选择器优化策略**: 智能选择器生成和XPath优化
+
+### 6. development-workflow.mdc
+- **开发流程**: 分支管理和提交规范
+- **环境管理**: 虚拟环境和依赖管理
+- **代码质量保证**: 代码检查工具和预提交钩子
+- **调试和日志**: 结构化日志和性能监控
+
+## 使用指南
+
+### 新功能开发
+1. 查看 project-overview.mdc 了解项目整体架构
+2. 参考 architecture-patterns.mdc 选择合适的设计模式
+3. 遵循 coding-standards.mdc 编写代码
+4. 按照 development-workflow.mdc 提交代码
+
+### Web UI开发
+1. 参考 web-ui-development.mdc 了解技术栈
+2. 使用FastAPI创建RESTful API
+3. 使用Jinja2模板和Bootstrap构建前端
+4. 遵循模块化JavaScript开发规范
+
+### 浏览器自动化开发
+1. 查看 browser-automation.mdc 了解核心概念
+2. 使用Browser-Use进行录制功能开发
+3. 使用Playwright进行执行功能开发
+4. 实现智能的选择器优化和错误处理
+
+## 重要提醒
+
+### 必须遵循的规范
+- ✅ 所有异步函数必须使用 `async/await`
+- ✅ 使用结构化日志记录
+- ✅ 遵循三阶段架构：录制→执行→自愈
+- ✅ 使用Pydantic进行数据验证
+- ✅ 实现适当的错误处理和重试机制
+
+### 开发阶段要求
+- **Phase 2**: 当前正在开发执行功能，需要实现Playwright执行器
+- **浏览器自动化**: 必须支持Browser-Use录制和Playwright执行
+- **并发处理**: 需要实现浏览器池和并发控制
+- **模板渲染**: 支持Jinja2模板变量替换
+
+## 更新说明
+
+这些规则基于项目当前状态（Phase 1完成，Phase 2进行中）制定，随着项目发展可能需要更新。如果发现规则与实际开发需求不符，请及时更新相关规则文件。

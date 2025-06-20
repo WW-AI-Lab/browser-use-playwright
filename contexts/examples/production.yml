@@ -1,0 +1,55 @@
+# 生产环境配置示例
+# 用于生产环境的工作流执行
+
+# 基本信息
+environment: "production"
+debug: false
+
+# 网站配置
+websites:
+  # 电商网站示例
+  ecommerce:
+    base_url: "https://example-shop.com"
+    login_url: "https://example-shop.com/login"
+    timeout: 30
+
+  # 社交媒体示例
+  social:
+    base_url: "https://example-social.com"
+    api_endpoint: "https://api.example-social.com/v1"
+    timeout: 20
+
+# 用户凭据占位符 (实际值通过环境变量提供)
+credentials:
+  username: "{{ USERNAME }}"
+  password: "{{ PASSWORD }}"
+  email: "{{ EMAIL }}"
+
+# 数据配置
+data:
+  output_format: "json"
+  batch_size: 100
+  max_items: 1000
+
+# 执行配置
+execution:
+  headless: true  # 生产环境建议无头模式
+  concurrent: true
+  max_workers: 5
+  retry_attempts: 3
+  timeout: 60
+
+# 通知配置
+notifications:
+  email:
+    enabled: true
+    recipients: ["admin@example.com"]
+  webhook:
+    enabled: false
+    url: "https://hooks.example.com/webhook"
+
+# 日志配置
+logging:
+  level: "INFO"
+  save_screenshots: false
+  save_dom: false 

@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "browser-use-playwright"
+version = "1.0.0"
+description = "Browser-Use + Playwright RPA自动化框架：录制-执行-自愈三阶段解决方案"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "WW-AI-Lab", email = "contact@ww-ai-lab.com"}
+]
+maintainers = [
+    {name = "WW-AI-Lab", email = "contact@ww-ai-lab.com"}
+]
+keywords = ["browser-use", "playwright", "rpa", "automation", "web-scraping", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Testing",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "browser-use>=0.1.0",
+    "playwright>=1.40.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "typer>=0.9.0",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0.0",
+    "structlog>=23.2.0",
+    "aiofiles>=23.2.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/WW-AI-Lab/browser-use-playwright"
+Repository = "https://github.com/WW-AI-Lab/browser-use-playwright.git"
+Documentation = "https://github.com/WW-AI-Lab/browser-use-playwright#readme"
+"Bug Tracker" = "https://github.com/WW-AI-Lab/browser-use-playwright/issues"
+
+[project.scripts]
+browser-use-playwright = "src.cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.html", "*.css", "*.js", "*.yml", "*.yaml", "*.json"]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto" 

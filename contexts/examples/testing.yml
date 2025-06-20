@@ -1,0 +1,53 @@
+# 测试环境配置示例
+# 用于开发和测试的工作流
+
+# 基本信息
+environment: "testing"
+debug: true
+
+# 测试网站配置
+websites:
+  # 测试站点
+  test_site:
+    base_url: "https://httpbin.org"
+    timeout: 15
+
+  # 演示站点
+  demo_site:
+    base_url: "https://demo.playwright.dev"
+    timeout: 10
+
+# 测试数据
+test_data:
+  users:
+    - username: "test_user_1"
+      email: "test1@example.com"
+    - username: "test_user_2"
+      email: "test2@example.com"
+  
+  search_terms:
+    - "browser automation"
+    - "web scraping"
+    - "playwright testing"
+
+# 执行配置
+execution:
+  headless: false  # 测试时显示浏览器
+  concurrent: false
+  max_workers: 1
+  retry_attempts: 1
+  timeout: 30
+  slow_mo: 100  # 减慢执行速度便于观察
+
+# 调试配置
+debugging:
+  save_screenshots: true
+  save_dom: true
+  pause_on_error: true
+  record_video: true
+
+# 日志配置
+logging:
+  level: "DEBUG"
+  console_output: true
+  file_output: true 

@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""
+Browser-Use-Playwright 主启动脚本
+支持CLI命令、Web UI启动、虚拟环境管理
+"""
+
+import os
+import sys
+import subprocess
+import argparse
+from pathlib import Path
+
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
+
+
+def is_in_venv():
+    """检查是否在虚拟环境中"""
+    return (
+        hasattr(sys, 'real_prefix') or
+        (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix) or
+        'VIRTUAL_ENV' in os.environ
+    )
+
+
+def find_venv_python():
+    """查找虚拟环境中的Python执行路径"""
+    venv_paths = [
+        project_root / ".venv",
+        project_root / "venv",
+        project_root / ".virtualenv"
+    ]
+    
+    for venv_path in venv_paths:
+        if venv_path.exists():
+            # Windows
+            python_exe = venv_path / "Scripts" / "python.exe"
+            if python_exe.exists():
+                return str(python_exe)
+            
+            # Unix/Linux/macOS
+            python_exe = venv_path / "bin" / "python"
+            if python_exe.exists():
+                return str(python_exe)
+    
+    return None
+
+
+def activate_venv_and_run(args):
+    """激活虚拟环境并运行命令"""
+    venv_python = find_venv_python()
+    
+    if venv_python:
+        print(f"🔍 发现虚拟环境: {venv_python}")
+        print(f"🚀 使用虚拟环境运行: {' '.join(args)}")
+        
+        # 使用虚拟环境的Python重新运行脚本
+        cmd = [venv_python, __file__] + args
+        return subprocess.run(cmd, env=os.environ.copy())
+    else:
+        print("⚠️  未找到虚拟环境(.venv, venv, .virtualenv)")
+        print("💡 建议创建虚拟环境: python -m venv .venv")
+        return None
+
+
+def create_venv():
+    """创建虚拟环境"""
+    venv_path = project_root / ".venv"
+    
+    if venv_path.exists():
+        print(f"✅ 虚拟环境已存在: {venv_path}")
+        return True
+    
+    print(f"🏗️  创建虚拟环境: {venv_path}")
+    try:
+        subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
+        print("✅ 虚拟环境创建成功")
+        
+        # 升级pip
+        venv_python = find_venv_python()
+        if venv_python:
+            print("📦 升级pip...")
+            subprocess.run([venv_python, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+            
+            # 安装依赖
+            requirements_file = project_root / "requirements.txt"
+            if requirements_file.exists():
+                print("📋 安装项目依赖...")
+                subprocess.run([venv_python, "-m", "pip", "install", "-r", str(requirements_file)], check=True)
+        
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 创建虚拟环境失败: {e}")
+        return False
+
+
+def start_web_ui():
+    """启动Web UI"""
+    print("🌐 启动Browser-Use-Playwright Web UI...")
+    print("📝 地址: http://127.0.0.1:8000")
+    print("⏹️  按 Ctrl+C 停止服务")
+    
+    try:
+        # 导入并启动Web应用
+        from src.web.app import app
+        import uvicorn
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    except KeyboardInterrupt:
+        print("\n🛑 Web UI已停止")
+    except Exception as e:
+        print(f"❌ 启动Web UI失败: {e}")
+        sys.exit(1)
+
+
+def main():
+    """主入口函数"""
+    parser = argparse.ArgumentParser(
+        description="Browser-Use-Playwright - Browser-Use + Playwright RPA自动化框架",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+使用示例:
+  ./browser-use-playwright                    # 启动Web UI界面
+  ./browser-use-playwright web               # 启动Web UI界面  
+  ./browser-use-playwright cli               # 启动CLI模式
+  ./browser-use-playwright record            # 录制工作流
+  ./browser-use-playwright run workflow.json # 执行工作流
+  ./browser-use-playwright create-venv       # 创建虚拟环境
+  ./browser-use-playwright --help           # 显示帮助信息
+
+虚拟环境管理:
+  如果不在虚拟环境中，脚本会自动查找并激活虚拟环境(.venv, venv, .virtualenv)
+        """
+    )
+    
+    parser.add_argument(
+        "command", 
+        nargs="?", 
+        default="web",
+        choices=["web", "cli", "record", "run", "list", "show", "clean", "heal", "batch", "create-venv", "version"],
+        help="要执行的命令 (默认: web)"
+    )
+    
+    parser.add_argument(
+        "args", 
+        nargs="*", 
+        help="传递给CLI的额外参数"
+    )
+    
+    parser.add_argument(
+        "--force-venv", 
+        action="store_true",
+        help="强制使用虚拟环境"
+    )
+    
+    # 解析参数
+    parsed_args, unknown_args = parser.parse_known_args()
+    all_cli_args = parsed_args.args + unknown_args
+    
+    # 检查虚拟环境
+    if not is_in_venv() and not parsed_args.command == "create-venv":
+        if parsed_args.force_venv or find_venv_python():
+            # 尝试激活虚拟环境并重新运行
+            result = activate_venv_and_run(sys.argv[1:])
+            if result:
+                sys.exit(result.returncode)
+        else:
+            print("⚠️  当前不在虚拟环境中")
+            print("💡 建议运行: ./browser-use-playwright create-venv 创建虚拟环境")
+            print("🔄 或添加 --force-venv 参数强制运行")
+    
+    # 处理命令
+    if parsed_args.command == "web":
+        start_web_ui()
+    
+    elif parsed_args.command == "create-venv":
+        if create_venv():
+            print("🎉 虚拟环境设置完成！")
+            print("💡 现在可以运行: ./browser-use-playwright web 启动Web UI")
+        else:
+            sys.exit(1)
+    
+    elif parsed_args.command == "cli":
+        # 启动CLI交互模式
+        try:
+            from src.cli.main import main as cli_main
+            cli_main()
+        except Exception as e:
+            print(f"❌ 启动CLI失败: {e}")
+            sys.exit(1)
+    
+    else:
+        # 其他命令直接传递给CLI
+        try:
+            from src.cli.main import app
+            import typer
+            
+            # 构造CLI命令参数
+            cli_args = [parsed_args.command] + all_cli_args
+            
+            # 使用typer运行CLI命令
+            app(cli_args, standalone_mode=False)
+            
+        except SystemExit as e:
+            # typer会抛出SystemExit，这是正常的
+            sys.exit(e.code)
+        except Exception as e:
+            print(f"❌ 执行命令失败: {e}")
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main() 

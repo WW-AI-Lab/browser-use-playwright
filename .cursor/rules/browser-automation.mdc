@@ -1,0 +1,450 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 浏览器自动化开发规范
+
+## Browser-Use 集成规范
+
+### 录制阶段实现
+参考 [src/core/recorder.py](mdc:src/core/recorder.py) 的实现：
+
+```python
+from browser_use import Agent
+
+class WorkflowRecorder:
+    """Browser-Use工作流录制器"""
+    
+    async def record_workflow(self, name: str, task_description: str) -> Workflow:
+        """使用Browser-Use录制工作流"""
+        agent = Agent(
+            task=task_description,
+            llm=self.llm,
+            browser_config=self.browser_config
+        )
+        
+        # 启动录制会话
+        result = await agent.run()
+        
+        # 转换为标准工作流格式
+        workflow = self._convert_to_workflow(result, name)
+        return workflow
+```
+
+### Browser-Use 配置
+```python
+from browser_use import BrowserConfig
+
+browser_config = BrowserConfig(
+    headless=False,           # 录制时显示浏览器
+    browser_type="chromium",  # 使用Chromium
+    viewport_size=(1920, 1080),
+    user_data_dir="./chrome-profiles",  # 复用浏览器配置
+    extra_chromium_args=[
+        "--disable-blink-features=AutomationControlled",
+        "--disable-dev-shm-usage"
+    ]
+)
+```
+
+### 步骤类型映射
+Browser-Use动作到工作流步骤的映射：
+
+```python
+BROWSER_USE_TO_STEP_TYPE = {
+    "navigate": StepType.NAVIGATE,
+    "click": StepType.CLICK,
+    "type": StepType.FILL,
+    "select": StepType.SELECT,
+    "wait": StepType.WAIT,
+    "scroll": StepType.SCROLL,
+    "hover": StepType.HOVER,
+    "press": StepType.PRESS_KEY,
+    "screenshot": StepType.SCREENSHOT,
+    "extract": StepType.EXTRACT
+}
+```
+
+## Playwright 执行规范
+
+### 执行器架构
+```python
+from playwright.async_api import async_playwright, Browser, Page
+
+class PlaywrightExecutor:
+    """Playwright工作流执行器"""
+    
+    def __init__(self):
+        self.browser: Optional[Browser] = None
+        self.context = None
+        self.page: Optional[Page] = None
+    
+    async def execute_workflow(self, workflow: Workflow, context: Dict[str, str]) -> ExecutionResult:
+        """执行工作流"""
+        try:
+            await self._setup_browser()
+            
+            for step in workflow.steps:
+                await self._execute_step(step, context)
+                
+            return ExecutionResult(success=True)
+            
+        except Exception as e:
+            logger.error("工作流执行失败", error=str(e))
+            return ExecutionResult(success=False, error=str(e))
+        finally:
+            await self._cleanup()
+```
+
+### 步骤执行器
+使用工厂模式创建不同类型的步骤执行器：
+
+```python
+class StepExecutor(ABC):
+    @abstractmethod
+    async def execute(self, page: Page, step: WorkflowStep, context: Dict[str, str]) -> StepResult:
+        pass
+
+class NavigateExecutor(StepExecutor):
+    async def execute(self, page: Page, step: WorkflowStep, context: Dict[str, str]) -> StepResult:
+        url = self._render_template(step.url, context)
+        await page.goto(url, timeout=step.timeout or 30000)
+        return StepResult(success=True, step_id=step.id)
+
+class ClickExecutor(StepExecutor):
+    async def execute(self, page: Page, step: WorkflowStep, context: Dict[str, str]) -> StepResult:
+        selector = step.selector or step.xpath
+        await page.click(selector, timeout=step.timeout or 10000)
+        return StepResult(success=True, step_id=step.id)
+
+class FillExecutor(StepExecutor):
+    async def execute(self, page: Page, step: WorkflowStep, context: Dict[str, str]) -> StepResult:
+        selector = step.selector or step.xpath
+        value = self._render_template(step.value, context)
+        await page.fill(selector, value, timeout=step.timeout or 10000)
+        return StepResult(success=True, step_id=step.id)
+```
+
+### 并发执行管理
+```python
+import asyncio
+from asyncio import Semaphore
+
+class ConcurrentExecutor:
+    def __init__(self, max_concurrent: int = 5):
+        self.semaphore = Semaphore(max_concurrent)
+        self.browser_pool = BrowserPool(max_browsers=max_concurrent)
+    
+    async def execute_batch(self, workflows: List[Workflow]) -> List[ExecutionResult]:
+        """批量执行工作流"""
+        tasks = []
+        for workflow in workflows:
+            task = self._execute_with_semaphore(workflow)
+            tasks.append(task)
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return [r if isinstance(r, ExecutionResult) else ExecutionResult(success=False, error=str(r)) for r in results]
+    
+    async def _execute_with_semaphore(self, workflow: Workflow) -> ExecutionResult:
+        async with self.semaphore:
+            browser = await self.browser_pool.acquire()
+            try:
+                executor = PlaywrightExecutor(browser)
+                return await executor.execute_workflow(workflow)
+            finally:
+                await self.browser_pool.release(browser)
+```
+
+## 浏览器配置管理
+
+### Chrome Profile 复用
+```python
+class BrowserProfileManager:
+    """浏览器配置文件管理器"""
+    
+    def __init__(self, profiles_dir: Path = Path("chrome-profiles")):
+        self.profiles_dir = profiles_dir
+        self.profiles_dir.mkdir(exist_ok=True)
+    
+    def get_profile_path(self, profile_name: str = "default") -> Path:
+        """获取浏览器配置文件路径"""
+        profile_path = self.profiles_dir / profile_name
+        profile_path.mkdir(exist_ok=True)
+        return profile_path
+    
+    async def launch_with_profile(self, profile_name: str = "default") -> Browser:
+        """使用指定配置文件启动浏览器"""
+        async with async_playwright() as p:
+            return await p.chromium.launch_persistent_context(
+                user_data_dir=str(self.get_profile_path(profile_name)),
+                headless=False,
+                viewport={"width": 1920, "height": 1080},
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage"
+                ]
+            )
+```
+
+### 浏览器池管理
+```python
+class BrowserPool:
+    """浏览器实例池"""
+    
+    def __init__(self, max_browsers: int = 5):
+        self.max_browsers = max_browsers
+        self.available_browsers: asyncio.Queue = asyncio.Queue()
+        self.in_use_browsers: Set[Browser] = set()
+        self._initialized = False
+    
+    async def initialize(self):
+        """初始化浏览器池"""
+        if self._initialized:
+            return
+            
+        async with async_playwright() as p:
+            for i in range(self.max_browsers):
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=["--disable-dev-shm-usage"]
+                )
+                await self.available_browsers.put(browser)
+        
+        self._initialized = True
+    
+    async def acquire(self) -> Browser:
+        """获取浏览器实例"""
+        if not self._initialized:
+            await self.initialize()
+            
+        browser = await self.available_browsers.get()
+        self.in_use_browsers.add(browser)
+        return browser
+    
+    async def release(self, browser: Browser):
+        """释放浏览器实例"""
+        if browser in self.in_use_browsers:
+            self.in_use_browsers.remove(browser)
+            await self.available_browsers.put(browser)
+```
+
+## 选择器优化策略
+
+### 智能选择器生成
+参考 [src/utils/cleaner.py](mdc:src/utils/cleaner.py) 的实现：
+
+```python
+class SelectorOptimizer:
+    """选择器优化器"""
+    
+    PRIORITY_ATTRIBUTES = [
+        "data-testid",
+        "data-cy", 
+        "data-test",
+        "id",
+        "name",
+        "aria-label",
+        "title",
+        "alt"
+    ]
+    
+    def optimize_selector(self, selector: str) -> str:
+        """优化CSS选择器"""
+        if not selector:
+            return selector
+            
+        # 优先使用稳定属性
+        for attr in self.PRIORITY_ATTRIBUTES:
+            if f'[{attr}=' in selector:
+                return selector
+                
+        # 移除不稳定的类名
+        optimized = self._remove_dynamic_classes(selector)
+        
+        # 简化层级关系
+        optimized = self._simplify_hierarchy(optimized)
+        
+        return optimized
+    
+    def _remove_dynamic_classes(self, selector: str) -> str:
+        """移除动态类名"""
+        dynamic_patterns = [
+            r'\.css-\w+',           # CSS-in-JS生成的类名
+            r'\.MuiButton-\w+',     # Material-UI类名
+            r'\.ant-\w+-\w+',       # Ant Design类名
+        ]
+        
+        for pattern in dynamic_patterns:
+            selector = re.sub(pattern, '', selector)
+            
+        return selector
+    
+    def _simplify_hierarchy(self, selector: str) -> str:
+        """简化选择器层级"""
+        # 移除过深的层级关系
+        parts = selector.split(' ')
+        if len(parts) > 4:
+            # 保留前2个和后2个选择器
+            return ' '.join(parts[:2] + parts[-2:])
+        return selector
+```
+
+### XPath 优化
+```python
+class XPathOptimizer:
+    """XPath优化器"""
+    
+    def optimize_xpath(self, xpath: str) -> str:
+        """优化XPath表达式"""
+        if not xpath:
+            return xpath
+            
+        # 优先使用属性定位
+        if self._has_stable_attributes(xpath):
+            return self._extract_stable_xpath(xpath)
+            
+        # 使用文本内容定位
+        if 'text()=' in xpath:
+            return self._optimize_text_xpath(xpath)
+            
+        # 简化位置定位
+        return self._simplify_position_xpath(xpath)
+    
+    def _has_stable_attributes(self, xpath: str) -> bool:
+        """检查是否包含稳定属性"""
+        stable_attrs = ['@id', '@name', '@data-testid', '@aria-label']
+        return any(attr in xpath for attr in stable_attrs)
+    
+    def _extract_stable_xpath(self, xpath: str) -> str:
+        """提取基于稳定属性的XPath"""
+        # 简化为最短的稳定路径
+        if '@id=' in xpath:
+            match = re.search(r'@id=["\'](mdc:[^"\']+)["\']', xpath)
+            if match:
+                return f"//*[@id='{match.group(1)}']"
+        return xpath
+```
+
+## 错误处理和重试机制
+
+### 智能重试策略
+```python
+import asyncio
+from typing import Callable, Any
+
+class RetryStrategy:
+    """重试策略"""
+    
+    def __init__(self, max_retries: int = 3, base_delay: float = 1.0):
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+    
+    async def execute_with_retry(self, func: Callable, *args, **kwargs) -> Any:
+        """带重试的执行函数"""
+        last_exception = None
+        
+        for attempt in range(self.max_retries + 1):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                
+                if attempt < self.max_retries:
+                    delay = self.base_delay * (2 ** attempt)  # 指数退避
+                    logger.warning(f"执行失败，{delay}秒后重试", 
+                                 attempt=attempt + 1, 
+                                 error=str(e))
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("重试次数已用完", error=str(e))
+        
+        raise last_exception
+
+# 使用装饰器简化重试逻辑
+def retry_on_failure(max_retries: int = 3, base_delay: float = 1.0):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            strategy = RetryStrategy(max_retries, base_delay)
+            return await strategy.execute_with_retry(func, *args, **kwargs)
+        return wrapper
+    return decorator
+
+@retry_on_failure(max_retries=3)
+async def click_element(page: Page, selector: str):
+    await page.click(selector)
+```
+
+### 异常处理层次
+```python
+class BrowserAutomationError(Exception):
+    """浏览器自动化基础异常"""
+    pass
+
+class ElementNotFoundError(BrowserAutomationError):
+    """元素未找到异常"""
+    pass
+
+class TimeoutError(BrowserAutomationError):
+    """超时异常"""
+    pass
+
+class NavigationError(BrowserAutomationError):
+    """导航异常"""
+    pass
+
+# 异常处理示例
+async def safe_click(page: Page, selector: str, timeout: int = 10000):
+    """安全点击元素"""
+    try:
+        await page.wait_for_selector(selector, timeout=timeout)
+        await page.click(selector)
+    except playwright.async_api.TimeoutError:
+        raise TimeoutError(f"等待元素超时: {selector}")
+    except Exception as e:
+        raise ElementNotFoundError(f"点击元素失败: {selector}, 错误: {str(e)}")
+```
+
+## 性能优化
+
+### 页面加载优化
+```python
+async def optimize_page_loading(page: Page):
+    """优化页面加载性能"""
+    # 阻止加载不必要的资源
+    await page.route("**/*.{png,jpg,jpeg,gif,svg,css,woff,woff2}", lambda route: route.abort())
+    
+    # 设置用户代理
+    await page.set_user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    
+    # 禁用图片加载
+    await page.set_extra_http_headers({"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"})
+```
+
+### 内存管理
+```python
+class BrowserMemoryManager:
+    """浏览器内存管理"""
+    
+    async def cleanup_page(self, page: Page):
+        """清理页面资源"""
+        # 清除缓存
+        await page.evaluate("() => { window.localStorage.clear(); window.sessionStorage.clear(); }")
+        
+        # 移除事件监听器
+        await page.evaluate("() => { window.removeEventListener('beforeunload', null); }")
+        
+        # 关闭页面
+        await page.close()
+    
+    async def monitor_memory_usage(self, browser: Browser):
+        """监控内存使用"""
+        contexts = browser.contexts
+        for context in contexts:
+            pages = context.pages
+            if len(pages) > 10:  # 页面数量过多时清理
+                logger.warning("页面数量过多，开始清理", page_count=len(pages))
+                for page in pages[:-5]:  # 保留最新的5个页面
+                    await self.cleanup_page(page)
+```

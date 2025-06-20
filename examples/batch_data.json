@@ -1,0 +1,22 @@
+[
+  {
+    "search_query": "Python编程",
+    "description": "搜索Python编程相关书籍"
+  },
+  {
+    "search_query": "机器学习",
+    "description": "搜索机器学习相关书籍"
+  },
+  {
+    "search_query": "数据结构",
+    "description": "搜索数据结构相关书籍"
+  },
+  {
+    "search_query": "算法导论",
+    "description": "搜索算法导论相关书籍"
+  },
+  {
+    "search_query": "深度学习",
+    "description": "搜索深度学习相关书籍"
+  }
+] 

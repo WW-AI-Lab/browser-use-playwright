@@ -1,0 +1,30 @@
+{
+  "name": "test_healing_workflow",
+  "description": "用于测试自愈功能的工作流",
+  "steps": [
+    {
+      "type": "navigate",
+      "url": "https://example.com",
+      "description": "导航到示例页面"
+    },
+    {
+      "type": "wait",
+      "selector": "#main-content",
+      "timeout": 5,
+      "description": "等待主内容加载"
+    },
+    {
+      "type": "click",
+      "selector": "#submit-button",
+      "element_description": "提交按钮",
+      "description": "点击提交按钮"
+    },
+    {
+      "type": "type",
+      "selector": "#email-input",
+      "value": "test@example.com",
+      "element_description": "邮箱输入框",
+      "description": "输入邮箱地址"
+    }
+  ]
+}
